@@ -52,7 +52,7 @@ import java.util.UUID;
  */
 public class SampleChooserActivity extends Activity {
 
-  private static final String TAG = "SampleChooserActivity";
+  private static final String TAG = "SampleChooserActivityyy";
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
