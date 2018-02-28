@@ -22,6 +22,7 @@ import android.content.res.AssetManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.util.JsonReader;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -33,12 +34,20 @@ import android.widget.ExpandableListView.OnChildClickListener;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.google.android.exoplayer2.ParserException;
+import com.google.android.exoplayer2.adapter.SampleAdapter;
+import com.google.android.exoplayer2.model.DrmInfo;
+import com.google.android.exoplayer2.model.PlaylistSample;
+import com.google.android.exoplayer2.model.Sample;
+import com.google.android.exoplayer2.model.SampleGroup;
+import com.google.android.exoplayer2.model.UriSample;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DataSourceInputStream;
 import com.google.android.exoplayer2.upstream.DataSpec;
 import com.google.android.exoplayer2.upstream.DefaultDataSource;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Util;
+import com.google.android.exoplayer2.utils.AssetsUtils;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -51,8 +60,7 @@ import java.util.UUID;
  * An activity for selecting from a list of samples.
  */
 public class SampleChooserActivity extends Activity {
-
-  private static final String TAG = "SampleChooserActivityyy";
+  private static final String TAG = "SampleChooserActivity";
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
@@ -60,45 +68,11 @@ public class SampleChooserActivity extends Activity {
     setContentView(R.layout.sample_chooser_activity);
     Intent intent = getIntent();
     String dataUri = intent.getDataString();
-    String[] uris;
-    if (dataUri != null) {
-      uris = new String[] {dataUri};
-    } else {
-      ArrayList<String> uriList = new ArrayList<>();
-      AssetManager assetManager = getAssets();
-      try {
-        for (String asset : assetManager.list("")) {
-          if (asset.endsWith(".exolist.json")) {
-            uriList.add("asset:///" + asset);
-          }
-        }
-      } catch (IOException e) {
-        Toast.makeText(getApplicationContext(), R.string.sample_list_load_error, Toast.LENGTH_LONG)
-            .show();
-      }
-      uris = new String[uriList.size()];
-      uriList.toArray(uris);
-      Arrays.sort(uris);
-    }
+
+    String[] uris = AssetsUtils.getUrlsFromAssets(this, dataUri);
+
     SampleListLoader loaderTask = new SampleListLoader();
     loaderTask.execute(uris);
-  }
-
-  private void onSampleGroups(final List<SampleGroup> groups, boolean sawError) {
-    if (sawError) {
-      Toast.makeText(getApplicationContext(), R.string.sample_list_load_error, Toast.LENGTH_LONG)
-          .show();
-    }
-    ExpandableListView sampleList = findViewById(R.id.sample_list);
-    sampleList.setAdapter(new SampleAdapter(this, groups));
-    sampleList.setOnChildClickListener(new OnChildClickListener() {
-      @Override
-      public boolean onChildClick(ExpandableListView parent, View view, int groupPosition,
-          int childPosition, long id) {
-        onSampleSelected(groups.get(groupPosition).samples.get(childPosition));
-        return true;
-      }
-    });
   }
 
   private void onSampleSelected(Sample sample) {
@@ -273,189 +247,20 @@ public class SampleChooserActivity extends Activity {
 
   }
 
-  private static final class SampleAdapter extends BaseExpandableListAdapter {
-
-    private final Context context;
-    private final List<SampleGroup> sampleGroups;
-
-    public SampleAdapter(Context context, List<SampleGroup> sampleGroups) {
-      this.context = context;
-      this.sampleGroups = sampleGroups;
+  private void onSampleGroups(final List<SampleGroup> groups, boolean sawError) {
+    if (sawError) {
+      Toast.makeText(getApplicationContext(), R.string.sample_list_load_error, Toast.LENGTH_LONG)
+           .show();
     }
-
-    @Override
-    public Sample getChild(int groupPosition, int childPosition) {
-      return getGroup(groupPosition).samples.get(childPosition);
-    }
-
-    @Override
-    public long getChildId(int groupPosition, int childPosition) {
-      return childPosition;
-    }
-
-    @Override
-    public View getChildView(int groupPosition, int childPosition, boolean isLastChild,
-        View convertView, ViewGroup parent) {
-      View view = convertView;
-      if (view == null) {
-        view = LayoutInflater.from(context).inflate(android.R.layout.simple_list_item_1, parent,
-            false);
+    ExpandableListView sampleList = findViewById(R.id.sample_list);
+    sampleList.setAdapter(new SampleAdapter(this, groups));
+    sampleList.setOnChildClickListener(new OnChildClickListener() {
+      @Override
+      public boolean onChildClick(ExpandableListView parent, View view, int groupPosition,
+                                  int childPosition, long id) {
+        onSampleSelected(groups.get(groupPosition).samples.get(childPosition));
+        return true;
       }
-      ((TextView) view).setText(getChild(groupPosition, childPosition).name);
-      return view;
-    }
-
-    @Override
-    public int getChildrenCount(int groupPosition) {
-      return getGroup(groupPosition).samples.size();
-    }
-
-    @Override
-    public SampleGroup getGroup(int groupPosition) {
-      return sampleGroups.get(groupPosition);
-    }
-
-    @Override
-    public long getGroupId(int groupPosition) {
-      return groupPosition;
-    }
-
-    @Override
-    public View getGroupView(int groupPosition, boolean isExpanded, View convertView,
-        ViewGroup parent) {
-      View view = convertView;
-      if (view == null) {
-        view = LayoutInflater.from(context).inflate(android.R.layout.simple_expandable_list_item_1,
-            parent, false);
-      }
-      ((TextView) view).setText(getGroup(groupPosition).title);
-      return view;
-    }
-
-    @Override
-    public int getGroupCount() {
-      return sampleGroups.size();
-    }
-
-    @Override
-    public boolean hasStableIds() {
-      return false;
-    }
-
-    @Override
-    public boolean isChildSelectable(int groupPosition, int childPosition) {
-      return true;
-    }
-
+    });
   }
-
-  private static final class SampleGroup {
-
-    public final String title;
-    public final List<Sample> samples;
-
-    public SampleGroup(String title) {
-      this.title = title;
-      this.samples = new ArrayList<>();
-    }
-
-  }
-
-  private static final class DrmInfo {
-    public final UUID drmSchemeUuid;
-    public final String drmLicenseUrl;
-    public final String[] drmKeyRequestProperties;
-    public final boolean drmMultiSession;
-
-    public DrmInfo(UUID drmSchemeUuid, String drmLicenseUrl,
-        String[] drmKeyRequestProperties, boolean drmMultiSession) {
-      this.drmSchemeUuid = drmSchemeUuid;
-      this.drmLicenseUrl = drmLicenseUrl;
-      this.drmKeyRequestProperties = drmKeyRequestProperties;
-      this.drmMultiSession = drmMultiSession;
-    }
-
-    public void updateIntent(Intent intent) {
-      Assertions.checkNotNull(intent);
-      intent.putExtra(PlayerActivity.DRM_SCHEME_EXTRA, drmSchemeUuid.toString());
-      intent.putExtra(PlayerActivity.DRM_LICENSE_URL, drmLicenseUrl);
-      intent.putExtra(PlayerActivity.DRM_KEY_REQUEST_PROPERTIES, drmKeyRequestProperties);
-      intent.putExtra(PlayerActivity.DRM_MULTI_SESSION, drmMultiSession);
-    }
-  }
-
-  private abstract static class Sample {
-    public final String name;
-    public final boolean preferExtensionDecoders;
-    public final DrmInfo drmInfo;
-
-    public Sample(String name, boolean preferExtensionDecoders, DrmInfo drmInfo) {
-      this.name = name;
-      this.preferExtensionDecoders = preferExtensionDecoders;
-      this.drmInfo = drmInfo;
-    }
-
-    public Intent buildIntent(Context context) {
-      Intent intent = new Intent(context, PlayerActivity.class);
-      intent.putExtra(PlayerActivity.PREFER_EXTENSION_DECODERS, preferExtensionDecoders);
-      if (drmInfo != null) {
-        drmInfo.updateIntent(intent);
-      }
-
-      return intent;
-    }
-
-  }
-
-  private static final class UriSample extends Sample {
-
-    public final String uri;
-    public final String extension;
-    public final String adTagUri;
-
-    public UriSample(String name, boolean preferExtensionDecoders, DrmInfo drmInfo, String uri,
-        String extension, String adTagUri) {
-      super(name, preferExtensionDecoders, drmInfo);
-      this.uri = uri;
-      this.extension = extension;
-      this.adTagUri = adTagUri;
-    }
-
-    @Override
-    public Intent buildIntent(Context context) {
-      return super.buildIntent(context)
-          .setData(Uri.parse(uri))
-          .putExtra(PlayerActivity.EXTENSION_EXTRA, extension)
-          .putExtra(PlayerActivity.AD_TAG_URI_EXTRA, adTagUri)
-          .setAction(PlayerActivity.ACTION_VIEW);
-    }
-
-  }
-
-  private static final class PlaylistSample extends Sample {
-
-    public final UriSample[] children;
-
-    public PlaylistSample(String name, boolean preferExtensionDecoders, DrmInfo drmInfo,
-        UriSample... children) {
-      super(name, preferExtensionDecoders, drmInfo);
-      this.children = children;
-    }
-
-    @Override
-    public Intent buildIntent(Context context) {
-      String[] uris = new String[children.length];
-      String[] extensions = new String[children.length];
-      for (int i = 0; i < children.length; i++) {
-        uris[i] = children[i].uri;
-        extensions[i] = children[i].extension;
-      }
-      return super.buildIntent(context)
-          .putExtra(PlayerActivity.URI_LIST_EXTRA, uris)
-          .putExtra(PlayerActivity.EXTENSION_LIST_EXTRA, extensions)
-          .setAction(PlayerActivity.ACTION_VIEW_LIST);
-    }
-
-  }
-
 }
