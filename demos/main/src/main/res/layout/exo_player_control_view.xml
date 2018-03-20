@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:layout_gravity="bottom"
     android:layoutDirection="ltr"
-    android:background="#cfc"
+    android:background="#fcc9"
     android:orientation="vertical">
 
     <LinearLayout
